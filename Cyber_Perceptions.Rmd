@@ -1,0 +1,251 @@
+---
+title: "Cyber_Perceptions_Survey_Proj"
+author: "Karl Grindal"
+date: "11/13/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# setwd<-("C:/Users/karl_000/Documents/SpiderOak Hive/GeorgiaTech")
+library(dplyr)
+# install.packages("qualtRics") 
+
+library(qualtRics)
+raw_data <- read_survey("C:/Users/karl_000/Documents/SpiderOak Hive/GeorgiaTech/Fall_2020/Cyber_Perceptions/Cyber_Perceptions_Survey_v9.csv")
+
+```
+
+# Clean Data for Analysis
+```{r}
+
+# Clean Column Names
+names(raw_data) <- gsub("\\.", "", names(raw_data))
+
+# Drop Columns
+raw_data <- raw_data[ , -which(names(raw_data) %in% c("Status","Progress","Finished","RecordedDate","RecipientLastName","RecipientFirstName",
+                                                      "RecipientEmail","ExternalReference","UserLanguage","Q1","role","organization"))]
+
+# Remove Incomplete Data
+raw_data <- raw_data[complete.cases(raw_data$LocationLatitude),]
+
+# Remove Duplicative Responses
+raw_data <- raw_data[!duplicated(raw_data$IPAddress), ]
+
+# Breakout Data
+Userdata <- subset(raw_data[,1:which(colnames(raw_data)=="DistributionChannel")])
+Questions <- subset(raw_data[,which(colnames(raw_data)=="1Q1"):which(colnames(raw_data)=="5Q4")])
+Controls <- subset(raw_data[,which(colnames(raw_data)=="Q11"):which(colnames(raw_data)=="Q9")])
+Scenario <- subset(raw_data[,which(colnames(raw_data)=="Time Lag 1" ):NCOL(raw_data)])
+```
+
+#Fix Userdata
+```{r}
+NewUserData <- rbind(Userdata,Userdata,Userdata,Userdata,Userdata)
+
+```
+
+#Fix Questions
+```{r}
+Questions1 <- Questions[,c("1Q1","1Q2","1Q3","1Q4")]
+Questions2 <- Questions[,c("2Q1","2Q2","2Q3","2Q4")]
+Questions3 <- Questions[,c("3Q1","3Q2","3Q3","3Q4")]
+Questions4 <- Questions[,c("4Q1","4Q2","4Q3","4Q4")]
+Questions5 <- Questions[,c("5Q1","5Q2","5Q3","5Q4")]
+
+Questions1$ID <- 1
+Questions2$ID <- 2
+Questions3$ID <- 3
+Questions4$ID <- 4
+Questions5$ID <- 5
+
+dfs <- c("Questions1", "Questions2", "Questions3", "Questions4", "Questions5")
+for(df in dfs)
+  assign(df, setNames(get(df),  c("AttackDef","AssessConf","Response","Norm", "ID")))
+
+NewQuestions <- rbind(Questions1,Questions2,Questions3,Questions4,Questions5)
+
+cols <- c("AttackDef","AssessConf","Response","Norm", "ID")
+NewQuestions[cols] <- lapply(NewQuestions[cols], factor)  
+
+
+```
+
+
+# Fix Controls
+```{r}
+Controls$KQ1 <- if_else((Controls$Q11 ==TRUE),0,1)
+Controls$KQ2 <- if_else((Controls$Q12 ==TRUE),0,1)
+Controls$KQ3 <- if_else((Controls$Q14 ==TRUE),1,0)
+Controls$KQ4 <- if_else((Controls$Q24 ==TRUE),0,1)
+Controls$KQ5 <- if_else((Controls$Q13 ==TRUE),1,0)
+Controls$KQ6 <- if_else((Controls$Q25 =="Secure"),1,0)
+Controls$KQ7 <- if_else((Controls$Q26 =="True"),1,0)
+
+Controls$KSUM <- (rowSums(Controls[,c("KQ1","KQ2","KQ3","KQ4","KQ5","KQ6","KQ7")])/7)
+
+Controls$R1 <- Controls$Q29_1
+Controls$R1 <- (Controls$R1 / 7)
+
+prob <- c("Definitely take my winnings"=1,"Probably take my winnings"=2,"Not sure"=3,"Probably continue playing"=4,"Definitely continue playing"=5)
+Controls$R2 <- prob[Controls$Q30]
+
+likert <- c("Strongly agree"=5,"Somewhat agree"=4,"Neither agree nor disagree"=3,"Somewhat disagree"=2,"Strongly disagree"=1)
+Controls$R3 <- likert[Controls$Q31]
+Controls$R4 <- likert[Controls$Q32]
+Controls$R5 <- likert[Controls$Q34]
+Controls$R6 <- likert[Controls$Q35]
+easy <- c("Extremely difficult"=1,"Somewhat difficult"=2,"Neither easy nor difficult"=3,"Somewhat easy"=4,"Extremely easy"=5)
+Controls$R7 <- easy[Controls$Q36]
+
+Controls$RSUM <- (rowSums(Controls[,c("R2","R3","R4","R5","R6","R7")])/30)
+Controls$RSUMED <- (rowSums(Controls[,c("R1","RSUM")])/2)
+
+Controls$M1 <- if_else((Controls$Q17 =="Yes"),1,0)
+Controls$M2 <- if_else((Controls$Q19 =="Yes"),1,0)
+Controls$M3 <- if_else((Controls$Q20 =="Yes"),1,0)
+
+Controls$MSUM <- (rowSums(Controls[,c("M1","M2","M3")])/3)
+
+CleanControls <- subset(Controls[,c("Q6","Q7","Q8","KSUM","RSUMED","MSUM")])
+
+American_list <- c("American (American)","American (Caucasian)","American citizen","USA (Caucasian)","American (USA)","US Citizen","USA","US","us","American","United States",
+                   "american","U.S.A.","United states","usa","U.S.")
+cut_America<- paste0("\\b(", paste0(American_list, collapse="|"), ")\\b")
+
+CleanControls$Q8 <- gsub(cut_America, "American", CleanControls$Q8)
+
+cols <- c("Q6","Q7","Q8")
+CleanControls[cols] <- lapply(CleanControls[cols], factor)  
+
+summary(CleanControls)
+
+NewControls <- rbind(CleanControls,CleanControls,CleanControls,CleanControls,CleanControls)
+
+
+
+```
+
+
+# Fix Scores
+```{r}
+# Score Stacking
+Scenario1 <- Scenario[,c("Time Lag 1","Attribution Confidence 1","Damage Assessment 1","Hack type 1","Persistence 1")]
+Scenario2 <- Scenario[,c("Time Lag 2","Attribution Confidence 2","Damage Assessment 2","Hack type 2","Persistence 2")]
+Scenario3 <- Scenario[,c("Time Lag 3","Attribution Confidence 3","Damage Assessment 3","Hack type 3","Persistence 3")]
+Scenario4 <- Scenario[,c("Time Lag 4","Attribution Confidence 4","Damage Assessment 4","Hack type 4","Persistence 4")]
+Scenario5 <- Scenario[,c("Time Lag 5","Attribution Confidence 5","Damage Assessment 5","Hack type 5","Persistence 5")]
+
+# Set IDs
+Scenario1$ID <- 1
+Scenario2$ID <- 2
+Scenario3$ID <- 3
+Scenario4$ID <- 4
+Scenario5$ID <- 5
+
+dfs <- c("Scenario1", "Scenario2", "Scenario3", "Scenario4", "Scenario5")
+for(df in dfs)
+  assign(df, setNames(get(df),  c("Time_Lag","Attribution_Confidence","Damage_Assessment","Hack_Type","Persistence", "ID")))
+
+Scenarios <- rbind(Scenario1,Scenario2,Scenario3,Scenario4,Scenario5)
+
+cols <- c("Time_Lag","Attribution_Confidence","Damage_Assessment","Hack_Type","Persistence", "ID")
+Scenarios[cols] <- lapply(Scenarios[cols], factor)  
+
+summary(Scenarios)
+
+```
+
+#Combine Components
+```{r}
+
+stacked_data <- cbind(NewUserData,NewControls,Scenarios,NewQuestions)
+
+levels(stacked_data$Response)[match("Escalate",levels(stacked_data$Response))] <- "Escalatory attack" # Fixed a survey answer response error affecting 1 question for 4 respondents.
+
+View(table(stacked_data$AttackDef, stacked_data$Response))
+
+View(table(stacked_data$AttackDef, stacked_data$Response,  stacked_data$Norm))
+
+stacked_data
+
+```
+
+
+# New Regressions
+```{r}
+# survey_new <- stacked_data[-c(59,70,82,89,95,164,208,219,243,280,283,319,329,334,354), ]
+
+foo <- function(a,b) c(quotient = floor(a / b), modulo = a %% b)
+#test <-c(59,70,82,89,95,164,208,219,243,280,283,319,329,334,354)
+
+# Test for outliers based on the student
+#foo(test,72)
+
+stacked_data$AssessConf <- as.character(stacked_data$AssessConf)
+stacked_data
+
+likert2 <- c("extremely unconfident"=1,"not very confident"=2,"somewhat confident"=3,"very confident"=4,"extremely confident"=5)
+stacked_data$AssessConfNo <- likert2[stacked_data$AssessConf]
+
+stacked_data$AttackDefNo <- if_else((stacked_data$AttackDef =="Sylvania is signaling their opposition to our prior high intensity attack. They want to strategically deter attacks of this kind in the future."),2,1)
+
+stacked_data$communicativity <- if_else(stacked_data$AttackDefNo == 2,abs(stacked_data$AssessConfNo-6),stacked_data$AssessConfNo+5)
+
+stacked_data$communicativity <- as.numeric(stacked_data$communicativity)
+
+stacked_data$AttackDefNo <- as.numeric(stacked_data$AttackDefNo)
+
+stacked_data$AttackDefNeg <- if_else((stacked_data$AttackDef =="Sylvania is signaling their opposition to our prior high intensity attack. They want to strategically deter attacks of this kind in the future."),.5,-.5)
+
+class(stacked_data$'AttackDefNo')
+class(stacked_data$'ResponseId')
+```
+
+```{r}
+summary(stacked_data$communicativity)
+
+```
+
+
+
+```{r}
+
+table(stacked_data$communicativity)
+
+
+# H1:
+
+logitregH1 <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence, data = stacked_data)
+summary(logitregH1)
+
+logitregH1b <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type * Attribution_Confidence, data = stacked_data)
+summary(logitregH1b)
+
+logitregH1c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence, data = stacked_data)
+summary(logitregH1c)
+
+
+logitregH2c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type + Damage_Assessment * Attribution_Confidence + Attribution_Confidence * Hack_Type
+                   + Persistence + Time_Lag + Persistence * Time_Lag, data = stacked_data)
+summary(logitregH1c)
+
+
+logitregH2d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type + Damage_Assessment * Attribution_Confidence + Attribution_Confidence * Hack_Type
+                   + Persistence + Time_Lag + Persistence * Time_Lag + Damage_Assessment * Persistence + Hack_Type * Persistence + Attribution_Confidence * Persistence + Damage_Assessment * Time_Lag + Hack_Type * 
+                     Time_Lag + Attribution_Confidence * Time_Lag, data = stacked_data)
+summary(logitregH1d)
+
+with(summary(logitregH1d), 1 - deviance/null.deviance) # maybe is this the R squared?
+
+par(mfrow = c(2, 2))
+plot(logitregH1d)
+
+```
+
+
+
+
