@@ -12,19 +12,16 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # setwd<-("C:/Users/karl_000/Documents/SpiderOak Hive/GeorgiaTech")
 library(dplyr)
-# install.packages("qualtRics") 
-
 library(qualtRics)
-
 library(corrplot)
 library(here)
+library(ppcor)
+library(psych)
+library(tidyverse)
+library(gridExtra)
+library(nnet)
 
-setwd("C:/Users/karl_000/Documents/SpiderOak Hive/GeorgiaTech/Fall_2020/Cyber_Perceptions/")
-
-# raw_data <- read_survey(here("Fall_2020","Cyber_Perceptions","Cyber_Perceptions_Survey_v9.csv"))
-  
-raw_data <- read_survey("Cyber_Perceptions_Survey_v9.csv")
-
+raw_data <- read_survey("C:/Users/karl_000/Documents/SpiderOak Hive/GeorgiaTech/Fall_2020/Cyber_Perceptions/Cyber_Perceptions_Survey_v9.csv")
 
 ```
 
@@ -166,55 +163,28 @@ Scenarios[cols] <- lapply(Scenarios[cols], factor)
 
 summary(Scenarios)
 
-```
-
 #Combine Components
-```{r}
-
 stacked_data <- cbind(NewUserData,NewControls,Scenarios,NewQuestions)
 
 levels(stacked_data$Response)[match("Escalate",levels(stacked_data$Response))] <- "Escalatory attack" # Fixed a survey answer response error affecting 1 question for 4 respondents.
 
-View(table(stacked_data$AttackDef, stacked_data$Response))
 
-View(table(stacked_data$AttackDef, stacked_data$Response,  stacked_data$Norm))
+table(stacked_data$AttackDef, stacked_data$Response)
+table(stacked_data$AttackDef, stacked_data$Response,  stacked_data$Norm)
 
 stacked_data
 
 ```
-# Testing leverage and identifying outlier variables
+
+
+
+
+
+# Date Reducation to Creat Cross Correlation Matrix
 ```{r}
-# Analyze the residuals to check the adequacy of the model. 
-# Compute the leverages associated with the data points. Does one (or more) of these answers 
-# stand out as an outlier in the set of independent variable data points? 
-# we should consider taking out an observation with high leverage
-
-# step 1: Compute the leverage matrix H (to find leverages associated with the data points)
-
-# First create matrix Z
-
-Z <- cbind(stacked_data$communicativity, stacked_data$Attack_conf, stacked_data$Attribution, stacked_data$Damage, stacked_data$Hack_type, stacked_data$Persistence)
-#Z
-# Compute for ZZinv - this estimates the variance of the error 
-ZZinv <- solve(t(Z) %*% Z)
-# Compute leverage matrix, THEN (%>% operator) find the leverages values of the matrix
-H <- Z %*% ZZinv %*% t(Z) %>% diag()    # the diagonals of this matrix are the leverages, the end of the formula should 
-#output those leverages
-H
-hist(H)   # histogram to check if any answers stand out as outliers
-# at this point i'm not sure if we should repeat this pattern to check for interactions with every term and then 
-# dropping them until the most parsimonious model is found or do them one by one as follows:
-model3 <- glm(Attack_definition ~ Escalation*Time_Lag +I(Escalation^2)+I(Time_Lag^2))
-#this is the likelihood ratio test of H0: ??_2 = 0 with a significance level of ?? = 0.05 to see if the original model be modified
-```
-
-
-
-
-# Date Reducation
-```{r}
-
 #Removing ID variable
+View(stacked_data)
+
 data1 <- subset(stacked_data, select = c("communicativity","Response","Norm","Damage_Assessment","Hack_Type","Attribution_Confidence","Persistence","Time_Lag"))
 
 data1$Damage_Assessment <- as.numeric(data1$Damage_Assessment)
@@ -227,36 +197,20 @@ data1$Norm <- as.numeric(data1$Norm)
 
 datamatrix<-cor(data1)
 corrplot(datamatrix, method="number")
+
+# Fix this...
+
 # high correlations are Hack_Type:Attribution_Confidence & Attribution_Confidence:Persistence & Time_Lag:Persistence
+# data2 <- data1[,-c("Norm")]
+# pcor(data2, method="pearson")
 
-library(ppcor)
-pcor(data1, method="pearson")
-
-# Level2: Attribution_Confidence*Persistence + Time_Lag*Persistenc
-
-library(psych)
-KMO(r=datamatrix)
-
-print(cortest.bartlett(datamatrix,nrow(data1)))
-
-parallel <- fa.parallel(data1, fm = "minres", fa = "fa")
+# Level2: Attribution_Confidence*Persistence + Time_Lag*Persistence
+# KMO(r=datamatrix)
+# print(cortest.bartlett(datamatrix,nrow(data1)))
+# parallel <- fa.parallel(data1, fm = "minres", fa = "fa")
 
 ```
 
-
-```{r}
-
-
-
-survey_new <- stacked_data[-c(), ]
-
-foo <- function(a,b) c(quotient = floor(a / b), modulo = a %% b)
-test <-c(59,70,82,89,95,164,208,219,243,280,283,319,329,334,354)
-
-# Test for outliers based on the student
-foo(test,72)
-
-```
 # Creating a communicativity variable
 ```{r}
 summary(stacked_data$communicativity)
@@ -285,15 +239,52 @@ stacked_data$communicativity <- as.numeric(stacked_data$communicativity)
 
 ```
 
-
-
+# Plotting Outliers
 ```{r}
 
-# Hypothesis without interaction effects
+# Plot of data with outliers.
+
+plot1 <- ggplot(data = data1, aes(x = Attribution_Confidence, y = communicativity)) +
+        geom_point() + 
+        geom_smooth(method = lm) +
+        xlim(0, 3) + ylim(0, 10) + 
+        ggtitle("No Outliers")
+plot2 <- ggplot(data = data1, aes(x = Attribution_Confidence, y = communicativity)) +
+        geom_point() + 
+        geom_smooth(method = lm) +
+        xlim(0, 3) + ylim(0, 10) + 
+        ggtitle("With Outliers")
+
+gridExtra::grid.arrange(plot1, plot2, ncol=2)
+
+
+mod <- lm(communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence, data=stacked_data)
+cooksd <- cooks.distance(mod)
+
+sample_size <- nrow(stacked_data)
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+
+with(summary(logitregH1c), 1 - deviance/null.deviance) # maybe is this the R squared?
+par(mfrow = c(2, 2))
+plot(logitregH1c)
+
+# survey_new <- stacked_data[-c(), ]
+
+# foo <- function(a,b) c(quotient = floor(a / b), modulo = a %% b)
+# test <-c(a,b,c)
+
+# Test for outliers based on the student
+# foo(test,72)
+
+```
+
+# Hypothesis 1: Without interaction effects
+```{r}
+
+# Hypothesis 
 
 logitregH1 <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence, data = stacked_data)
 summary(logitregH1)
-
 
 #Type a message
 
@@ -303,51 +294,49 @@ summary(logitregH1b)
 logitregH1c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence, data = stacked_data)
 summary(logitregH1c)
 
-# Hypothesis with interaction effects
+logitregH1d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + KSUM + RSUMED + MSUM, data = stacked_data)
+summary(logitregH1d)
 
-# hypothesis includes all possible interactions
+```
+
+# Hypothesis 2: With interaction effects
+```{r}
+
+# Hypothesis includes all possible interactions (coercive signal)
 logitregH2a <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence * Persistence * 
                      Time_Lag, data = data1)
 summary(logitregH2a)
 summary(logitregH2a)$coeff[-1,4]<0.05
 
-# only includes interactions of the Message variables with themseleves and Context with itself
-logitregH2b <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type + Damage_Assessment * Attribution_Confidence + Attribution_Confidence * Hack_Type
+# Only includes interactions of the Message variables with other message variables and Context with other context variables
+logitregH2b <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type + Damage_Assessment * 
+                     Attribution_Confidence + Attribution_Confidence * Hack_Type
                    + Persistence + Time_Lag + Persistence * Time_Lag, data = data1)
 summary(logitregH2b)
 
+# Running a regression with all interaction effects betweent two variables (excludes interaction effects between three)
+logitregH2c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + Damage_Assessment * Hack_Type 
+                   + Damage_Assessment * Attribution_Confidence + Attribution_Confidence * Hack_Type  + Persistence * Time_Lag + Damage_Assessment * Persistence
+                   + Hack_Type * Persistence + Attribution_Confidence * Persistence + Damage_Assessment * Time_Lag + Hack_Type * Time_Lag + Attribution_Confidence * 
+                     Time_Lag, data = data1)
+summary(logitregH2c)
+## high correlations are Hack_Type:Attribution_Confidence & Attribution_Confidence:Persistence & Time_Lag:Persistence
 
-logitregH2d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type + Damage_Assessment * Attribution_Confidence + Attribution_Confidence * Hack_Type
-                   + Persistence + Time_Lag + Persistence * Time_Lag + Damage_Assessment * Persistence + Hack_Type * Persistence + Attribution_Confidence * Persistence + Damage_Assessment * Time_Lag + Hack_Type * 
-                     Time_Lag + Attribution_Confidence * Time_Lag, data = stacked_data)
-summary(logitregH1d)
-
-
-# high correlations are Hack_Type:Attribution_Confidence & Attribution_Confidence:Persistence & Time_Lag:Persistence
 # Regression to evaluate whether interaction effects that showed high correlation in a cor table significantly alter the model
+logitregH2d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + Hack_Type*Time_Lag, data = stacked_data) # Hack_Type*Time_Lag did not show in cor table, but is significant
 
-logitregH2z <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + Hack_Type*Attribution_Confidence + Attribution_Confidence*Persistence + Time_Lag*Persistence, data = stacked_data)
-summary(logitregH2z) # no effect or significane
-summary(logitregH2z)$coeff[-1,4]<0.05
-
-with(summary(logitregH1c), 1 - deviance/null.deviance) # maybe is this the R squared?
-par(mfrow = c(2, 2))
-plot(logitregH2z)
-
-
+summary(logitregH2d) # no effect or significane
+summary(logitregH2d)$coeff[-1,4]<0.05
 
 ```
+
 
 # Hypothesis 3 on Escalation
 ```{r}
 
-library(nnet)
-
-
 # this subsetted data to only communicative attacks
 
 dataH3 <- subset(data1, communicativity>5)
-View(dataH3)
 
 # run with multinom
 logitregH3a <- multinom(Response ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data=dataH3)
@@ -381,9 +370,6 @@ summary(logitregH3d) # nothing is statistically significant
 # Hypothesis 4 on Norm Adoption --- Future research could focus on!
 ```{r}
 
-library(nnet)
-
-View(dataH4)
 dataH4 <- na.omit(dataH3)
 
 nrow(dataH4) # 31 results not sufficient for statistical tests
@@ -398,8 +384,25 @@ summary(logitregH4a)
 # 3) choose response (escalate, proportional, deescalate) for short term response
 # 4) in the long-term either abide or reject the proposed communicated norm
 
-  
 ```
+
+# Hypothesis 5 on Effect of Supplementary Variables on Confidence
+```{r}
+
+logitregH5a <- glm(formula = AssessConfNo ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + KSUM + RSUMED + MSUM, data = stacked_data)
+summary(logitregH1d)
+
+```
+# Hypothesis 6 Employing a logit on instrumentality vs communicativity
+
+```{r}
+
+stacked_data$AttackDefNo <- (stacked_data$AttackDefNo - 1)
+logitregH6a <- glm(formula = AttackDefNo ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + KSUM + RSUMED + MSUM, family = "binomial", 
+                   data = stacked_data) 
+summary(logitregH6a)
+```
+
 
 
 
