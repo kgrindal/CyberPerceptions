@@ -466,5 +466,3 @@ summary(logitregH7a)
 ```
  
 
-
-
