@@ -1,16 +1,16 @@
 ---
 title: "Cyber_Perceptions_Survey_Proj"
 author: "Karl Grindal"
-date: "11/13/2020"
+date: "03/15/2021"
 output:
   pdf_document: default
   html_document: default
 ---
 
+# Load Libraries and Create Anon File from Raw Qualtrics Output
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-# setwd<-("C:/Users/karl_000/Documents/SpiderOak Hive/GeorgiaTech")
 library(dplyr)
 library(qualtRics)
 library(corrplot)
@@ -34,14 +34,14 @@ write.csv(anon_data,"anon_data.csv")
 
 # Clean Data for Analysis
 ```{r}
-anon_data <- read.csv(here("anon_data.csv"), sep=",")
+anon_data <- read.csv(here::here("anon_data.csv"), sep=",")
   
 # Clean Column Names
 names(anon_data) <- gsub("\\.", "", names(anon_data))
 
 # Remove Incomplete Data
 anon_data <- filter(anon_data, Progress == 100)
-names(anon_data)
+# names(anon_data)
 
 # Breakout Data
 Userdata <- subset(anon_data[,1:which(colnames(anon_data)=="UserLanguage")])
@@ -50,14 +50,15 @@ Controls <- subset(anon_data[,which(colnames(anon_data)=="Q11"):which(colnames(a
 Scenario <- subset(anon_data[,which(colnames(anon_data)=="TimeLag1" ):NCOL(anon_data)])
 ```
 
-#Fix Userdata
+# Fix Userdata
 ```{r}
 NewUserData <- rbind(Userdata,Userdata,Userdata,Userdata,Userdata)
 
 ```
 
-#Fix Questions
+# Fix Questions
 ```{r}
+
 Questions1 <- Questions[,c("X1Q1","X1Q2","X1Q3","X1Q4")]
 Questions2 <- Questions[,c("X2Q1","X2Q2","X2Q3","X2Q4")]
 Questions3 <- Questions[,c("X3Q1","X3Q2","X3Q3","X3Q4")]
@@ -77,8 +78,6 @@ for(df in dfs)
 NewQuestions <- rbind(Questions1,Questions2,Questions3,Questions4,Questions5)
 
 cols <- c("AttackDef","AssessConf","Response","Norm", "ID")
-NewQuestions[cols] <- lapply(NewQuestions[cols], factor)  
-
 
 ```
 
@@ -127,13 +126,9 @@ cut_America<- paste0("\\b(", paste0(American_list, collapse="|"), ")\\b")
 CleanControls$Q8 <- gsub(cut_America, "American", CleanControls$Q8)
 
 cols <- c("Q6","Q7","Q8")
-CleanControls[cols] <- lapply(CleanControls[cols], factor)  
-
 summary(CleanControls)
 
 NewControls <- rbind(CleanControls,CleanControls,CleanControls,CleanControls,CleanControls)
-
-
 
 ```
 
@@ -147,7 +142,6 @@ Scenario3 <- Scenario[,c("TimeLag3","AttributionConfidence3","DamageAssessment3"
 Scenario4 <- Scenario[,c("TimeLag4","AttributionConfidence4","DamageAssessment4","Hacktype4","Persistence4")]
 Scenario5 <- Scenario[,c("TimeLag5","AttributionConfidence5","DamageAssessment5",
                          "Hacktype5","Persistence5")]
-
 
 # Set IDs
 Scenario1$ID <- 1
@@ -163,8 +157,6 @@ for(df in dfs)
 Scenarios <- rbind(Scenario1,Scenario2,Scenario3,Scenario4,Scenario5)
 
 cols <- c("Time_Lag","Attribution_Confidence","Damage_Assessment","Hack_Type","Persistence", "ID")
-Scenarios[cols] <- lapply(Scenarios[cols], factor)  
-
 summary(Scenarios)
 
 #Combine Components
@@ -174,82 +166,130 @@ levels(stacked_data$Response)[match("Escalate",levels(stacked_data$Response))] <
 
 # table(stacked_data$AttackDef, stacked_data$Response)
 # table(stacked_data$AttackDef, stacked_data$Response,  stacked_data$Norm)
+```
+# Attention Check Remove Low KSUM Scores
+```{r}
 
 table(stacked_data$KSUM)
 barplot(table(stacked_data$KSUM))
-nrow(stacked_data[stacked_data$KSUM > .5, ])/385 # drops 11.7% of participants
-nrow(stacked_data[stacked_data$KSUM > .6, ])/385 # drops 41.6% of participants
+nrow(stacked_data[stacked_data$KSUM <= .5, ]) # 45 rows 9 students
+nrow(stacked_data[stacked_data$KSUM > .5, ]) # 335 rows 67 students
+nrow(stacked_data[stacked_data$KSUM > .5, ])/380 # keeps 88.16% of participants, drops 11.84
+nrow(stacked_data[stacked_data$KSUM > .6, ])/380 # drops 41.6% of participants
 
-# stacked_data <- stacked_data[stacked_data$KSUM > .5714, ]
-nrow(stacked_data)
+stacked_data <- stacked_data[stacked_data$KSUM > .5, ]
+table(stacked_data$KSUM)
+barplot(table(stacked_data$KSUM))
+
+summary(stacked_data)
+
+stacked_data[14:18] <- lapply(stacked_data[14:18] , factor)
+summary(stacked_data)
 
 ```
 
-
-
 # Creating a communicativity variable
 ```{r}
-summary(stacked_data$communicativity)
-table(stacked_data$communicativity)
-
-stacked_data$AssessConf <- as.character(stacked_data$AssessConf)
-
-stacked_data$AttackDefNeg <- if_else((stacked_data$AttackDef =="Sylvania is signaling their opposition to our prior high intensity attack. They want to strategically deter attacks of this kind in the future."),.5,-.5)
-
-class(stacked_data$'AttackDefNo')
-class(stacked_data$'ResponseId')
-
-
 likert2 <- c("extremely unconfident"=1,"not very confident"=2,"somewhat confident"=3,"very confident"=4,"extremely confident"=5)
 stacked_data$AssessConfNo <- likert2[stacked_data$AssessConf]
 
 stacked_data$AttackDefNo <- if_else((stacked_data$AttackDef =="Sylvania is signaling their opposition to our prior high intensity attack. They want to strategically deter attacks of this kind in the future."),2,1)
-stacked_data$AttackDefNo <- as.numeric(stacked_data$AttackDefNo)
 
 stacked_data$communicativity <- if_else(stacked_data$AttackDefNo == 2,abs(stacked_data$AssessConfNo-6),stacked_data$AssessConfNo+5)
 
-stacked_data$communicativity <- as.numeric(stacked_data$communicativity)
+summary(stacked_data$communicativity)
+table(stacked_data$communicativity)
+plot(table(stacked_data$communicativity))
 
+table(stacked_data$AssessConf,stacked_data$Response)
+
+# dataH4 <- lapply(dataH4, as.numeric)
+# cor(stacked_data$AssessConf,stacked_data$Response)
+
+Assessed <- as.factor(stacked_data$AssessConf)
+Assessed <- as.numeric(Assessed)
+
+Responsed <- as.factor(stacked_data$Response)
+Responsed <- as.numeric(Responsed)
+
+table(stacked_data$Q6)
+# 30 No
+# 305 Yes
+
+table(stacked_data$Q7)
+
+# 40 college graduates
+# 26 professional degree
+# 1 doctorate
+
+table(stacked_data$Q8)
+
+# 49 Americans
+# 4 Indian
+# 9 Unique nationality
+# 4 ethnicities
+# 4 blank
 
 ```
 
-# Date Reducation to Creat Cross Correlation Matrix
+# Date Redefined to Create Cross Correlation Matrix
 ```{r}
+unique(stacked_data$AttackDef)
+
+stacked_data$AttackDefNeg <- if_else((stacked_data$AttackDef =="Sylvania is signaling their opposition to our prior high intensity attack. They want to strategically deter attacks of this kind in the future."),.5,-.5)
+
 #Removing ID variable
+data1 <- stacked_data %>%
+  dplyr::select(communicativity,AttackDef,Response,Norm,Time_Lag:Persistence,RSUMED) %>%
+  mutate(AttackDef = recode(AttackDef, "Sylvania is signaling their opposition to our prior high intensity attack. They want to strategically deter attacks of this kind in the future." = 2, "Sylvania is simply advancing its immediate interest fulfilling a tactical objective. Our prior high intensity attack was not relevant to their decision to attack us now." = 1)) %>%
+  mutate(Response = recode(Response, "Deescalate" = 1, "Employ a proportional response" = 2, "Escalate" = 3, "Escalatory attack" = 3)) %>%
+  mutate(Norm = recode(Norm, "Yes" = 2, "No" = 1)) %>%
+  mutate(Damage_Assessment = recode(Damage_Assessment, "500 Million" = 2, "10 Million" = 1)) %>%
+  mutate(Attribution_Confidence = recode(Attribution_Confidence, "90%" = 2, "60%" = 1)) %>%
+  mutate(Time_Lag = recode(Time_Lag, "6 months" = 1, "1 month" = 2)) %>% 
+  mutate(Hack_Type = recode(Hack_Type, "that temporarily disables a critical service" = 2, "where valuable confidential information is stolen" = 1)) %>%
+  mutate(Persistence = recode(Persistence, "Sylvania has been engaging in ongoing low-impact tactical cyber operations against Freedonia." = 2, 
+                              "Both nations have been engaging in ongoing low-impact tactical cyber operations against each other." = 1))
 
-data1 <- subset(stacked_data, select = c("communicativity","Response","Damage_Assessment","Hack_Type","Attribution_Confidence","Persistence","Time_Lag"))
+table(data1$communicativity,data1$Norm)
 
-data1$Damage_Assessment <- as.numeric(data1$Damage_Assessment)
-data1$Hack_Type <- as.numeric(data1$Hack_Type)
-data1$Attribution_Confidence <- as.numeric(data1$Attribution_Confidence)
-data1$Persistence <- as.numeric(data1$Persistence)
-data1$Time_Lag <- as.numeric(data1$Time_Lag)
-data1$Response <- as.numeric(data1$Response)
+# Time_Lag coded so that 1 month has higher "intensity" than 6 months based on hypothesis that this would be more communicative.
+
+dataH4 <- data1 %>%
+  filter(!is.na(Norm))
+
+dataH4 <- lapply(dataH4, as.numeric)
+dataH4 <- as.data.frame(dataH4)
+
+# cor(data1)
+# data1 <- subset (data1, select = -Norm)
+# data1 <- subset (data1, select = -Response)
+# data1
+
+# data1 <- data1[,-c(Norm)]
 
 datamatrix<-cor(data1)
 corrplot(datamatrix, method="number")
+
+data1[2:9] <- lapply(data1[2:9] , factor)
+
+table(data1$Hack_Type,data1$Time_Lag)
+table(data1$Response,data1$communicativity)
+summary(data1$Norm)
+
+# class(stacked_data$Hack_Type)
+# levels(stacked_data$Hack_Type)
+# stacked_data$Hack_Type <- relevel(stacked_data$Hack_Type, ref = "where valuable confidential information is stolen")
+  
+
+
 
 ```
 
 
 # Plotting Outliers
 ```{r}
-
 # Plot of data with outliers.
-
-plot1 <- ggplot(data = data1, aes(x = Attribution_Confidence, y = communicativity)) +
-        geom_point() + 
-        geom_smooth(method = lm) +
-        xlim(0, 3) + ylim(0, 10) + 
-        ggtitle("No Outliers")
-plot2 <- ggplot(data = data1, aes(x = Attribution_Confidence, y = communicativity)) +
-        geom_point() + 
-        geom_smooth(method = lm) +
-        xlim(0, 3) + ylim(0, 10) + 
-        ggtitle("With Outliers")
-
-gridExtra::grid.arrange(plot1, plot2, ncol=2)
-
 
 mod <- lm(communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence, data=stacked_data)
 cooksd <- cooks.distance(mod)
@@ -258,102 +298,156 @@ sample_size <- nrow(stacked_data)
 plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
 
 ```
-
-# Hypothesis 1: Without interaction effects
+# Hypothesis 1: Attack Def rather than Communicativity
 ```{r}
 
-# Hypothesis 
+# Hypothesis with Attack Def rather than Communicativity
+logitregH1a <- glm(formula = AttackDef ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data = data1, family = "binomial")
+summary(logitregH1a)
 
-logitregH1 <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence, data = stacked_data)
-summary(logitregH1)
-
-#Type a message
-
-logitregH1b <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence, data = stacked_data)
+logitregH1b <- glm(formula = AttackDef ~ Damage_Assessment * Hack_Type * Attribution_Confidence + Persistence * Time_Lag, data = data1, family = "binomial")
 summary(logitregH1b)
+```
 
-logitregH1c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence, data = stacked_data)
-summary(logitregH1c)
+# Hypothesis 2: Communitivity, Divided Bimodal
+```{r}
+communicative <- data1 %>%
+  filter(AttackDef == 1)
 
-logitregH1d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + KSUM + RSUMED + MSUM, data = stacked_data)
-summary(logitregH1d)
+instrumental <- data1 %>%
+  filter(AttackDef == 2)
+
+logitreg_2I1 <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence, data = instrumental)
+summary(logitreg_2I1)
+
+logitreg_2I2 <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence, data = instrumental)
+summary(logitreg_2I2)
+hist(logitreg_2I2$residuals)
+qqnorm(logitreg_2I2$residuals);qqline(logitreg_2I2$residuals)
+
+logitreg_2I3 <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence + Time_Lag * Persistence, data = instrumental)
+summary(logitreg_2I3)
+
+logitreg_2I4 <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Time_Lag + Persistence, data = communicative)
+summary(logitreg_2I4)
+
+logitreg_2C1 <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence, data = communicative)
+summary(logitreg_2C1)
 
 ```
 
-# Hypothesis 2: With interaction effects
+
+# Hypothesis 3: Without interaction effects
+```{r}
+levels(stacked_data$Hack_Type)
+levels(data1$Hack_Type)
+
+# Hypothesis
+logitregH3a <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence, data = data1)
+summary(logitregH3a)
+
+#Type a message
+logitregH3b <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence, data = data1)
+summary(logitregH3b)
+
+print(xtable::xtable(logitregH1b, digits = 2, caption='Communicativity: Message Variables with Interactions'), 
+      file = "logitregH3b.tex",
+      caption.placement = 'top', include.colnames = TRUE)
+
+logitregH3c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence, data = data1)
+summary(logitregH3c)
+
+logitregH3d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data = data1)
+summary(logitregH3d)
+
+```
+
+# Hypothesis 4: With interaction effects
 ```{r}
 
 # Hypothesis includes all possible interactions (coercive signal)
-logitregH2a <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence * Persistence * 
+logitregH4a <- glm(formula = communicativity ~ Damage_Assessment * Hack_Type * Attribution_Confidence * Persistence * 
                      Time_Lag, data = data1)
-summary(logitregH2a)
-summary(logitregH2a)$coeff[-1,4]<0.05
+summary(logitregH4a)
+summary(logitregH4a)$coeff[-1,4]<0.05
 
 # Only includes interactions of the Message variables with other message variables and Context with other context variables
-logitregH2b <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type + Damage_Assessment * 
+logitregH4b <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Damage_Assessment * Hack_Type + Damage_Assessment * 
                      Attribution_Confidence + Attribution_Confidence * Hack_Type
                    + Persistence + Time_Lag + Persistence * Time_Lag, data = data1)
-summary(logitregH2b)
+summary(logitregH4b)
 
-# Running a regression with all interaction effects betweent two variables (excludes interaction effects between three)
-logitregH2c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + Damage_Assessment * Hack_Type 
+# Running a regression with all interaction effects between two variables (excludes interaction effects between three)
+logitregH4c <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + Damage_Assessment * Hack_Type 
                    + Damage_Assessment * Attribution_Confidence + Attribution_Confidence * Hack_Type  + Persistence * Time_Lag + Damage_Assessment * Persistence
                    + Hack_Type * Persistence + Attribution_Confidence * Persistence + Damage_Assessment * Time_Lag + Hack_Type * Time_Lag + Attribution_Confidence * 
                      Time_Lag, data = data1)
-summary(logitregH2c)
+summary(logitregH4c)
 ## high correlations are Hack_Type:Attribution_Confidence & Attribution_Confidence:Persistence & Time_Lag:Persistence
 
 # Regression to evaluate whether interaction effects that showed high correlation in a cor table significantly alter the model
-logitregH2d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + Hack_Type*Time_Lag, data = data1) # Hack_Type*Time_Lag did not show in cor table, but is significant
+logitregH4d <- glm(formula = communicativity ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + Hack_Type*Time_Lag, data = data1) # Hack_Type*Time_Lag did not show in cor table, but is significant
+summary(logitregH4d)
 
-summary(logitregH2d) # no effect or significane
-summary(logitregH2d)$coeff[-1,4]<0.05
+print(xtable::xtable(logitregH4d, digits = 2, caption='Communicativity: High Correlation Variables'), 
+      file = "logitregH4d.tex",
+      caption.placement = 'top', include.colnames = TRUE)
+
+summary(logitregH4d) # no effect or significane
+summary(logitregH4d)$coeff[-1,4]<0.05
 
 ```
 
 
-# Hypothesis 3 on Escalation
+# Hypothesis 5: Escalation
 ```{r}
 
 # this subsetted data to only communicative attacks
 
-dataH3 <- subset(data1, communicativity>5)
-dataH3$Response <- factor(dataH3$Response)
+dataH5 <- subset(data1, communicativity>5)
+dataH5$Response <- factor(dataH5$Response)
 
-# run with multinom
-logitregH3a <- multinom(Response ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data=dataH3)
-summary(logitregH3a) # nothing is statistically significant
+# run with logit
+dataH5b <- dataH5 %>%
+  filter(Response != 2) %>%
+  mutate(Response = recode(Response, "3" = 2, "1" = 1))
+
+logitregH5a <- glm(Response ~ communicativity + RSUMED, data=dataH5b)
+summary(logitregH5a)
+
+logitregH5b <- glm(Response ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + RSUMED, data=dataH5b)
+summary(logitregH5b)
 
 # run with ordinal
-logitregH3a2 <- polr(Response ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data=dataH3)
-summary(logitregH3a2) # nothing is statistically significant
+logitregH5c <- polr(Response ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + RSUMED, data=dataH5)
+summary(logitregH5c) # nothing is statistically significant
 
-logitregH3b <- multinom(Response ~ Damage_Assessment * Hack_Type * Attribution_Confidence * Persistence * Time_Lag, data=dataH3)
-summary(logitregH3b) # nothing is statistically significant
+logitregH5d <- multinom(Response ~ Damage_Assessment * Hack_Type * Attribution_Confidence * Persistence * Time_Lag, data=dataH5)
+summary(logitregH5d) # nothing is statistically significant
 
 # Removing the constraint of perceiving communicative attacks
 
-logitregH3c <- multinom(Response ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data=data1)
-summary(logitregH3c) # nothing is statistically significant
+logitregH5e <- multinom(Response ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data=dataH5b)
+summary(logitregH5e) # nothing is statistically significant
 
 # nothing is statistically significant
-logitregH3d <- multinom(Response ~ Damage_Assessment * Hack_Type * Attribution_Confidence * Persistence * Time_Lag, data=data1)
-summary(logitregH3d) # nothing is statistically significant
-
+logitregH5f <- multinom(Response ~ Damage_Assessment * Hack_Type * Attribution_Confidence * Persistence * Time_Lag, data=dataH5)
+summary(logitregH5f) # nothing is statistically significant
 
 ```
 
 
-# Hypothesis 4 on Norm Adoption --- Future research could focus on!
+# Hypothesis 6: Norm Adoption --- Future research could focus on!
 ```{r}
+dataH6 <- dataH5 %>%
+  filter(!is.na(Norm)) %>%
+  mutate(Norm = recode(Norm, "No" = 0, "Yes" = 1))
 
-dataH4 <- na.omit(dataH3)
+nrow(dataH6) # 31 results not sufficient for statistical tests
+summary(dataH6)
 
-nrow(dataH4) # 31 results not sufficient for statistical tests
-summary(dataH4)
-
-# logitregH4a <- glm(Norm ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data=dataH4)
-# summary(logitregH4a)
+logitregH6a <- glm(Norm ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag, data=dataH4)
+summary(logitregH6a)
 
 # assumptions:
 # 1) identify if attack is communicative
@@ -363,27 +457,14 @@ summary(dataH4)
 
 ```
 
-# Hypothesis 5 on Effect of Supplementary Variables on Confidence
+# Hypothesis 7: Effect of Supplementary Variables on Confidence
 ```{r}
 
-logitregH5a <- glm(formula = AssessConfNo ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + KSUM + RSUMED + MSUM, data = stacked_data)
-summary(logitregH5a)
-
-summary(stacked_data$KSUM)
+logitregH7a <- glm(formula = AssessConfNo ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + KSUM + RSUMED + MSUM, data = stacked_data)
+summary(logitregH7a)
 
 ```
-# Hypothesis 6 Employing a logit on instrumentality vs communicativity
-
-```{r}
-
-stacked_data$AttackDefNo <- (stacked_data$AttackDefNo - 1)
-logitregH6a <- glm(formula = AttackDefNo ~ Damage_Assessment + Hack_Type + Attribution_Confidence + Persistence + Time_Lag + KSUM + RSUMED + MSUM, family = "binomial", 
-                   data = stacked_data) 
-summary(logitregH6a)
-```
-
-
-
+ 
 
 
 
